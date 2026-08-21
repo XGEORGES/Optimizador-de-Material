@@ -1,6 +1,6 @@
 {
-  "name": "True-Shape 2D Nesting CAD",
-  "short_name": "2D Nesting",
+  "name": "Optimizador de Material",
+  "short_name": "Optimizador 2D",
   "description": "Optimizador de Corte 2D y Anidado Automático de Chapa Metálica",
   "start_url": "./index.html",
   "display": "standalone",
