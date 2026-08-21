@@ -4,11 +4,13 @@
 
 import { nestingStore } from '../state/nestingStore.js';
 import { renderPieceSvgThumbnail } from './thumbnailRenderer.js';
+import { HologramCube } from './hologramViewer.js';
 
 export class InventoryView {
   constructor(containerElement, metricsElements) {
     this.container = containerElement;
     this.metricsElements = metricsElements;
+    this.hologram = null;
 
     // Suscribirse a cambios del Store
     nestingStore.subscribe((state) => {
@@ -19,15 +21,30 @@ export class InventoryView {
 
   render(state) {
     const pieces = state.pieces;
+
+    // Destruir holograma previo si existe
+    if (this.hologram) {
+      this.hologram.destroy();
+      this.hologram = null;
+    }
+
     this.container.innerHTML = '';
 
     if (pieces.length === 0) {
       this.container.innerHTML = `
-        <div style="text-align: center; padding: 2rem 1rem; color: var(--text-muted); font-size: 0.82rem;">
-          <div style="font-size: 1.8rem; margin-bottom: 0.5rem;">📦</div>
-          No hay piezas en el inventario.<br>Carga archivos DXF para agregarlas.
+        <div class="empty-inventory-container">
+          <div id="hologram-container" class="hologram-box"></div>
+          <div class="empty-inventory-title">SISTEMA EN ESPERA</div>
+          <p class="empty-inventory-desc">
+            No hay piezas en el inventario.<br>Arrastra o carga archivos <strong>.DXF</strong> para iniciar el análisis.
+          </p>
         </div>
       `;
+      // Iniciar Cubo Holográfico 3D
+      const holoEl = document.getElementById('hologram-container');
+      if (holoEl) {
+        this.hologram = new HologramCube(holoEl);
+      }
       return;
     }
 

@@ -297,7 +297,7 @@ export class CanvasViewer {
     const h = this.canvas.height;
 
     ctx.save();
-    ctx.fillStyle = '#0a0e17';
+    ctx.fillStyle = '#050b14';
     ctx.fillRect(0, 0, w, h);
 
     let gridStep = 100;
@@ -308,7 +308,7 @@ export class CanvasViewer {
     else if (this.scale > 10) gridStep = 5;
 
     ctx.lineWidth = 1;
-    ctx.strokeStyle = '#151d2f';
+    ctx.strokeStyle = 'rgba(0, 243, 255, 0.12)';
 
     const leftWorld = (-this.panX) / this.scale;
     const rightWorld = (w - this.panX) / this.scale;
@@ -333,11 +333,13 @@ export class CanvasViewer {
     }
     ctx.stroke();
 
-    // Ejes cartesianos
+    // Ejes cartesianos (Glow Cyan)
     const origin = this.worldToScreen(0, 0);
     ctx.beginPath();
     ctx.lineWidth = 1.5;
-    ctx.strokeStyle = '#24324f';
+    ctx.strokeStyle = 'rgba(0, 243, 255, 0.4)';
+    ctx.shadowColor = '#00f3ff';
+    ctx.shadowBlur = 6;
     ctx.moveTo(0, origin.y);
     ctx.lineTo(w, origin.y);
     ctx.moveTo(origin.x, 0);
@@ -399,8 +401,8 @@ export class CanvasViewer {
     const h = this.canvas.height;
 
     ctx.save();
-    ctx.font = '600 15px Inter, sans-serif';
-    ctx.fillStyle = '#64748b';
+    ctx.font = '600 15px "Rajdhani", sans-serif';
+    ctx.fillStyle = '#94a3b8';
     ctx.textAlign = 'center';
     ctx.fillText('Sin resultados de anidado. Haz clic en "▶ Iniciar Optimización".', w / 2, h / 2);
     ctx.restore();
@@ -418,11 +420,12 @@ export class CanvasViewer {
     const h = Math.abs(p2.y - p1.y);
 
     ctx.save();
-    // Borde exterior de la chapa
-    ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)';
-    ctx.lineWidth = 1.8;
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.6)';
-    ctx.fillRect(x, y, w, h);
+    // Plancha exterior (Amarillo neón #faff00 con trazo punteado [10, 10], contorno con resplandor, interior 100% transparente)
+    ctx.strokeStyle = '#faff00';
+    ctx.lineWidth = 2.0;
+    ctx.setLineDash([10, 10]);
+    ctx.shadowColor = '#faff00';
+    ctx.shadowBlur = 10;
     ctx.strokeRect(x, y, w, h);
 
     // Margen perimetral interior
@@ -434,16 +437,20 @@ export class CanvasViewer {
       const mw = Math.abs(pm2.x - pm1.x);
       const mh = Math.abs(pm2.y - pm1.y);
 
-      ctx.strokeStyle = 'rgba(245, 158, 11, 0.5)';
-      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = 'rgba(255, 0, 127, 0.7)';
+      ctx.shadowColor = '#ff007f';
+      ctx.shadowBlur = 8;
+      ctx.lineWidth = 1.4;
       ctx.setLineDash([6, 6]);
       ctx.strokeRect(mx, my, mw, mh);
-      ctx.setLineDash([]);
     }
 
+    ctx.setLineDash([]);
+    ctx.shadowBlur = 0;
+
     // Texto de cota de la plancha
-    ctx.font = 'bold 12px Inter, sans-serif';
-    ctx.fillStyle = '#64748b';
+    ctx.font = '700 13px "Rajdhani", sans-serif';
+    ctx.fillStyle = '#faff00';
     ctx.fillText(`PLANCHA: ${s.width} x ${s.height} mm (Margen: ${s.margin} mm)`, x + 10, y + 20);
 
     ctx.restore();

@@ -3,7 +3,7 @@
  * Estrategia Cache-First para funcionamiento 100% desconectado de internet (Offline).
  */
 
-const CACHE_NAME = 'nesting-cad-pwa-v2';
+const CACHE_NAME = 'nesting-cad-pwa-v5';
 
 const ASSETS_TO_CACHE = [
   './',
@@ -23,8 +23,11 @@ const ASSETS_TO_CACHE = [
   './src/ui/inventoryView.js',
   './src/ui/nestingRenderer.js',
   './src/ui/thumbnailRenderer.js',
+  './src/ui/hologramViewer.js',
   './src/export/dxfExporter.js',
   'https://cdn.jsdelivr.net/npm/dxf-parser@1.1.2/dist/dxf-parser.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js',
+  'https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&display=swap',
   'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap'
 ];
 
