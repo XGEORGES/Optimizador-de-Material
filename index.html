@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>True-Shape 2D Nesting CAD - Optimizador de Chapa</title>
+  
+  <meta name="theme-color" content="#0f172a">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/svg+xml" href="./icon.svg">
+  <link rel="apple-touch-icon" href="./icon.svg">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="./src/ui/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/dxf-parser@1.1.2/dist/dxf-parser.js"></script>
+</head>
+<body>
+
+  <!-- Encabezado Principal -->
+  <header class="app-header">
+    <div class="brand">
+      <div class="brand-icon">2D</div>
+      <div>
+        <h1>True-Shape 2D Nesting CAD</h1>
+      </div>
+      <span class="badge-module">v1.0 (PWA Offline & DXF CAM)</span>
+    </div>
+
+    <div class="header-actions">
+      <!-- Botón Destacado Exportar DXF (Módulo 5) -->
+      <button id="btnDownloadDxf" class="btn btn-primary btn-sm" disabled title="Descargar archivo DXF multicapa para máquinas de corte">
+        💾 Descargar DXF de Corte
+      </button>
+      <button id="btnClearAll" class="btn btn-secondary btn-sm" title="Limpiar todo">
+        Limpiar Todo
+      </button>
+    </div>
+  </header>
+
+  <!-- Barra Superior de Métricas Industriales en Tiempo Real -->
+  <div class="metrics-bar">
+    <div class="metrics-group">
+      <div class="metric-item">
+        <span class="metric-label">Piezas Únicas</span>
+        <span id="metricUniquePieces" class="metric-value highlight">0</span>
+      </div>
+      <div class="metric-item">
+        <span class="metric-label">Total a Cortar</span>
+        <span id="metricTotalPieces" class="metric-value highlight">0</span>
+      </div>
+      <div class="metric-item">
+        <span class="metric-label">Área Neta Piezas</span>
+        <span id="metricTotalArea" class="metric-value">0.000 m²</span>
+      </div>
+    </div>
+
+    <div class="metrics-group">
+      <div class="metric-item">
+        <span class="metric-label">Área Útil Plancha</span>
+        <span id="metricSheetUsableArea" class="metric-value">2.832 m²</span>
+      </div>
+      <div class="metric-item">
+        <span class="metric-label">Planchas Mínimas Teóricas</span>
+        <span id="metricMinSheets" class="metric-value success">0 plancha(s)</span>
+      </div>
+      <div class="metric-item">
+        <span class="metric-label">Ocupación Teórica</span>
+        <span id="metricEstYield" class="metric-value">0%</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Layout Principal de 3 Paneles -->
+  <main class="main-layout">
+    
+    <!-- PANEL IZQUIERDO: Ingesta DXF & Configuración de Corte -->
+    <aside class="panel panel-left">
+      <div class="panel-header">
+        <h2>1. Ingesta & Parámetros</h2>
+      </div>
+
+      <div class="panel-body">
+        
+        <!-- Zona Dropzone DXF -->
+        <div class="form-group">
+          <label>Carga de Archivos DXF</label>
+          <div id="dropzone" class="dropzone">
+            <div class="dropzone-icon">📂</div>
+            <p style="font-size: 0.8rem; font-weight: 600;">Arrastra archivos .DXF aquí</p>
+            <span style="font-size: 0.72rem; color: var(--text-muted);">o haz clic para explorar</span>
+            <input type="file" id="fileInput" accept=".dxf" multiple style="display: none;">
+          </div>
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 0.2rem 0;">
+
+        <!-- Configuración de Plancha (Sheet Config) -->
+        <div class="form-group">
+          <label for="sheetPreset">Formato de Plancha</label>
+          <select id="sheetPreset" class="form-control">
+            <option value="1200x2400" selected>1200 × 2400 mm (Estándar)</option>
+            <option value="1500x3000">1500 × 3000 mm (Grande)</option>
+            <option value="custom">Personalizado (Custom)...</option>
+          </select>
+        </div>
+
+        <!-- Dimensiones Custom (Ocultas por defecto) -->
+        <div id="customSheetDimensions" class="form-row" style="display: none;">
+          <div class="form-group">
+            <label for="sheetCustomWidth">Ancho (mm)</label>
+            <input type="number" id="sheetCustomWidth" class="form-control" value="2400" min="100" step="10">
+          </div>
+          <div class="form-group">
+            <label for="sheetCustomHeight">Alto (mm)</label>
+            <input type="number" id="sheetCustomHeight" class="form-control" value="1200" min="100" step="10">
+          </div>
+        </div>
+
+        <!-- Margen Perimetral -->
+        <div class="form-group">
+          <label for="sheetMargin">Margen Perimetral (M en mm)</label>
+          <input type="number" id="sheetMargin" class="form-control" value="10" min="0" max="200" step="1">
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 0.2rem 0;">
+
+        <!-- Parámetros de Corte -->
+        <div class="form-group">
+          <label for="partSpacing">Separación / Sangría (S en mm)</label>
+          <input type="number" id="partSpacing" class="form-control" value="5" min="0" max="100" step="0.5">
+        </div>
+
+        <!-- Slider de Rotación -->
+        <div class="form-group">
+          <label for="rotationStep">Paso de Ángulo de Rotación</label>
+          <div class="slider-container">
+            <input type="range" id="rotationStep" min="1" max="90" value="15" step="1">
+            <span id="rotationStepBadge" class="slider-badge">15°</span>
+          </div>
+        </div>
+
+        <!-- Toggle Hole Nesting -->
+        <div class="toggle-group">
+          <label for="holeNestingToggle" style="font-size: 0.8rem; font-weight: 500; cursor: pointer;">
+            Anidado en Agujeros (Hole Nesting)
+          </label>
+          <label class="switch">
+            <input type="checkbox" id="holeNestingToggle" checked>
+            <span class="slider-toggle"></span>
+          </label>
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 0.2rem 0;">
+
+        <!-- CONTROLES DE EJECUCIÓN DEL MOTOR DE ANIDADO (MÓDULO 3) -->
+        <div class="form-group">
+          <label>3. Motor de Anidado 2D (Web Worker)</label>
+          <div style="display: flex; gap: 0.5rem;">
+            <button id="btnStartNesting" class="btn btn-primary" style="flex: 1; font-weight: 600;">
+              ▶ Iniciar Optimización
+            </button>
+            <button id="btnStopNesting" class="btn btn-danger" style="display: none;">
+              ⏹ Detener
+            </button>
+          </div>
+        </div>
+
+        <!-- Barra de Progreso y Estado de Optimización -->
+        <div id="nestingProgressContainer" class="nesting-progress-box" style="display: none;">
+          <div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--text-muted); margin-bottom: 4px;">
+            <span id="nestingStatusLabel">Optimizando...</span>
+            <span id="nestingPercentLabel">0%</span>
+          </div>
+          <div class="progress-bar-bg">
+            <div id="nestingProgressBar" class="progress-bar-fill" style="width: 0%;"></div>
+          </div>
+          <div id="nestingSummaryText" style="font-size: 0.7rem; color: #38bdf8; margin-top: 4px;"></div>
+        </div>
+
+      </div>
+    </aside>
+
+    <!-- PANEL CENTRAL: Visor CAD Interactivo -->
+    <section class="canvas-container">
+      <canvas id="cadCanvas"></canvas>
+
+      <!-- Selector de Modo de Vista (Módulo 4) -->
+      <div class="view-mode-selector">
+        <button id="btnViewIngest" class="view-mode-btn active" title="Ver geometría CAD original">
+          📄 Vista Ingesta
+        </button>
+        <button id="btnViewNesting" class="view-mode-btn" title="Ver planchas optimizadas de corte">
+          ⚡ Vista Anidado (Corte)
+        </button>
+      </div>
+
+      <!-- Barra de Pestañas Multi-Plancha (Módulo 4) -->
+      <div id="sheetTabBar" class="sheet-tabs-container" style="display: none;">
+        <!-- Pestañas generadas dinámicamente: [Plancha 1 (100%)] [Plancha 2 (45%)] [Ver Todas] -->
+      </div>
+
+      <!-- Toolbar Superior -->
+      <div class="canvas-toolbar">
+        <button id="btnZoomFit" title="Ajustar zoom">⛶ Ajustar Zoom</button>
+        <button id="btnToggleSheet" title="Mostrar/ocultar plancha">⬜ Plancha</button>
+        <button id="btnToggleBounds" title="Mostrar/ocultar cotas">⊡ Cotas</button>
+        <button id="btnToggleVertices" title="Mostrar/ocultar vértices">● Vértices</button>
+      </div>
+
+      <!-- Tooltip Interactivo Flotante (Módulo 4) -->
+      <div id="canvasTooltip" class="canvas-tooltip" style="display: none;"></div>
+
+      <!-- Alerta flotante -->
+      <div id="openContoursAlert" style="display: none; position: absolute; top: 1rem; right: 1rem; max-width: 360px; background: rgba(239, 68, 68, 0.95); color: white; padding: 10px 14px; border-radius: 8px; font-size: 0.8rem; box-shadow: 0 4px 15px rgba(0,0,0,0.5); backdrop-filter: blur(4px);">
+      </div>
+
+      <!-- Leyenda -->
+      <div class="canvas-legend">
+        <div class="legend-item">
+          <div class="legend-color" style="background: #3b82f6;"></div>
+          <span>Pieza (CCW)</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background: #f87171;"></div>
+          <span>Agujeros (CW)</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background: rgba(236, 72, 153, 0.8);"></div>
+          <span>Hole Nesting</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background: rgba(245, 158, 11, 0.6); border: 1px dashed #f59e0b;"></div>
+          <span>Margen Plancha</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- PANEL DERECHO: Inventario de Piezas & Cantidades -->
+    <aside class="panel panel-right">
+      <div class="panel-header">
+        <h2>2. Inventario de Piezas</h2>
+      </div>
+
+      <div class="panel-body" style="padding: 0.85rem;">
+        <div id="inventoryList" class="inventory-list">
+          <!-- Las tarjetas de inventario se inyectan reactivamente desde nestingStore -->
+        </div>
+      </div>
+    </aside>
+
+  </main>
+
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
