@@ -3,7 +3,7 @@
  * Estrategia Cache-First para funcionamiento 100% desconectado de internet (Offline).
  */
 
-const CACHE_NAME = 'nesting-cad-pwa-v5';
+const CACHE_NAME = 'nesting-cad-pwa-v6';
 
 const ASSETS_TO_CACHE = [
   './',

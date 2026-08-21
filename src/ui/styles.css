@@ -944,3 +944,28 @@ input:checked + .slider-toggle:before {
 .tooltip-row strong {
   color: #ffffff;
 }
+
+/* ==========================================================================
+   Soporte Técnico
+   ========================================================================== */
+.support-info {
+  text-align: center;
+  margin-top: 25px;
+  padding-bottom: 10px;
+  font-size: 13px;
+  color: #5b7c99; /* Tono azul grisáceo apagado para no distraer */
+  font-family: 'Rajdhani', sans-serif;
+  letter-spacing: 0.5px;
+}
+
+.support-info a {
+  color: #00f3ff; /* Turquesa neón base */
+  text-decoration: none;
+  transition: all 0.3s ease;
+}
+
+.support-info a:hover {
+  color: #ff007f; /* Fucsia brillante de interacción */
+  text-shadow: 0 0 10px rgba(255, 0, 127, 0.6);
+}
+
