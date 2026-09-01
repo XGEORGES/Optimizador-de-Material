@@ -33,11 +33,19 @@ export class NestingEngine {
     const rotationStep = Math.max(1, Number(settings.rotationStep || 15));
     const holeNestingEnabled = Boolean(settings.holeNesting);
 
-    const primaryAngles = [0, 90, 180, 270];
-    const secondaryAngles = [];
-    for (let deg = 0; deg < 360; deg += rotationStep) {
-      if (!primaryAngles.includes(deg)) secondaryAngles.push(deg);
+    const allowedAngles = [];
+    // Si el paso es 360, significa que el usuario no quiere rotación (solo 0°)
+    if (rotationStep >= 360 || rotationStep === 0) {
+      allowedAngles.push(0);
+    } else {
+      for (let deg = 0; deg < 360; deg += rotationStep) {
+        allowedAngles.push(deg);
+      }
     }
+
+    // Clasificamos dinámicamente si son ortogonales o no para la heurística
+    const primaryAngles = allowedAngles.filter(a => a % 90 === 0);
+    const secondaryAngles = allowedAngles.filter(a => a % 90 !== 0);
 
     const buildVariant = (baseOuter, baseHoles, angle, isOrthogonal) => {
       const rotated = rotatePieceWithHoles(baseOuter, baseHoles, angle);
@@ -73,8 +81,18 @@ export class NestingEngine {
       }
     }
 
-    // Ordenar de mayor a menor área para colocar primero las piezas grandes limitantes
-    piecesPool.sort((a, b) => b.area - a.area);
+    // Restaurar el Pre-Sorting (Prioridad Absoluta al Área con agrupación por nombre si el tamaño es similar)
+    piecesPool.sort((a, b) => {
+      const areaDiff = b.area - a.area;
+      const idA = a.sourceId || a.pieceId || '';
+      const idB = b.sourceId || b.pieceId || '';
+      // Si la diferencia de área es pequeña (menos de 2000 mm2), agrupa por nombre
+      if (Math.abs(areaDiff) < 2000 && idA && idB) {
+        return idA.localeCompare(idB);
+      }
+      // De lo contrario, la más grande siempre gana
+      return areaDiff;
+    });
 
     const usableW = Math.max(0, sheetW - 2 * sheetMargin);
     const usableH = Math.max(0, sheetH - 2 * sheetMargin);
@@ -239,8 +257,11 @@ export class NestingEngine {
         }
 
         if (!collision) {
-          // Heurística Bottom-Left Pura para empaquetado profundo
-          let score = targetX + targetY * 1.5;
+          // Carriles de 20mm para evitar el "efecto diente"
+          const colX = Math.floor(targetX / 20);
+
+          // colX pesa para alinear, targetY pesa para no irse al fondo, targetX desempata
+          let score = (colX * 2000) + (targetY * 10) + targetX;
 
           if (!variant.isOrthogonal) {
             score += 40; // Penalización leve para que use ángulos libres si realmente ahorra espacio
@@ -249,8 +270,8 @@ export class NestingEngine {
           if (score < bestScore) {
             bestScore = score;
             best = { variant, targetX, targetY };
-            // Salida temprana solo si está pegada a la esquina inicial
-            if (targetX <= margin + 0.5 && targetY <= margin + 0.5 && variant.isOrthogonal) return best;
+            // Salida temprana
+            if (colX <= Math.floor(margin / 20) && variant.isOrthogonal) return best;
           }
         }
       }
@@ -327,8 +348,13 @@ export class NestingEngine {
     for (let x = margin; x <= margin + usableW; x += 100) pts.push({ x, y: margin });
     for (let y = margin; y <= margin + usableH; y += 100) pts.push({ x: margin, y });
 
-    // Ordenar con gravedad estricta (Abajo-Izquierda)
-    pts.sort((a, b) => (a.x + a.y * 1.2) - (b.x + b.y * 1.2));
+    // Ordenamiento por Columnas Virtuales (20mm) para evitar el zigzag
+    pts.sort((a, b) => {
+      const colA = Math.floor(a.x / 20);
+      const colB = Math.floor(b.x / 20);
+      if (colA === colB) return a.y - b.y; // Misma columna: apilar de abajo hacia arriba
+      return colA - colB; // Distinta columna: prioridad izquierda
+    });
 
     const unique = [];
     for (let i = 0; i < pts.length; i++) {

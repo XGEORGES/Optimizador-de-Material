@@ -96,18 +96,44 @@ class AppController {
     // ==========================================
     const partSpacingInput = document.getElementById('partSpacing');
     const rotationStepSlider = document.getElementById('rotationStep');
-    const rotationStepBadge = document.getElementById('rotationStepBadge');
+    const rotationStepInput = document.getElementById('rotationStepInput');
     const holeNestingToggle = document.getElementById('holeNestingToggle');
 
     partSpacingInput.addEventListener('input', (e) => {
       nestingStore.setSpacing(e.target.value);
     });
 
+    // Sincronizar input numérico al mover el slider
     rotationStepSlider.addEventListener('input', (e) => {
-      const val = e.target.value;
-      rotationStepBadge.textContent = `${val}°`;
+      const val = parseInt(e.target.value, 10) || 1;
+      if (rotationStepInput) rotationStepInput.value = val;
       nestingStore.setRotationStep(val);
     });
+
+    // Sincronizar slider al escribir en el input numérico
+    if (rotationStepInput) {
+      rotationStepInput.addEventListener('input', (e) => {
+        let val = parseInt(e.target.value, 10);
+        if (isNaN(val)) return;
+        if (val < 1) val = 1;
+        if (val > 360) val = 360;
+        rotationStepSlider.value = val;
+        nestingStore.setRotationStep(val);
+      });
+
+      // Validar al perder el foco (blur)
+      rotationStepInput.addEventListener('blur', (e) => {
+        let val = parseInt(e.target.value, 10);
+        if (isNaN(val) || val < 1) {
+          val = 1;
+        } else if (val > 360) {
+          val = 360;
+        }
+        rotationStepInput.value = val;
+        rotationStepSlider.value = val;
+        nestingStore.setRotationStep(val);
+      });
+    }
 
     holeNestingToggle.addEventListener('change', (e) => {
       nestingStore.setHoleNesting(e.target.checked);

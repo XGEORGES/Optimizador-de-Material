@@ -147,7 +147,7 @@ class NestingStore {
   }
 
   setRotationStep(step) {
-    this.settings.rotationStep = Math.min(90, Math.max(1, Math.round(Number(step) || 15)));
+    this.settings.rotationStep = Math.min(360, Math.max(1, Math.round(Number(step) || 15)));
     this.notify();
   }
 
