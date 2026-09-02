@@ -99,8 +99,6 @@ export class NestingEngine {
 
     sheets.push(createNewSheet());
 
-    let globalMaxX = 0;
-    let globalMaxY = 0;
     let lastPlacedPieceId = null;
     let lastPlacedAngle = null;
 
@@ -122,7 +120,7 @@ export class NestingEngine {
         }
 
         if (!placed) {
-          placed = this.tryPlaceBottomLeft(piece, curSheet, sheetMargin, usableW, usableH, spacing, preferredComplementaryAngle, globalMaxX, globalMaxY);
+          placed = this.tryPlaceBottomLeft(piece, curSheet, sheetMargin, usableW, usableH, spacing, preferredComplementaryAngle);
         }
 
         if (placed) break;
@@ -130,9 +128,7 @@ export class NestingEngine {
 
       if (!placed) {
         const newSheet = createNewSheet();
-        globalMaxX = 0;
-        globalMaxY = 0;
-        placed = this.tryPlaceBottomLeft(piece, newSheet, sheetMargin, usableW, usableH, spacing, preferredComplementaryAngle, globalMaxX, globalMaxY);
+        placed = this.tryPlaceBottomLeft(piece, newSheet, sheetMargin, usableW, usableH, spacing, preferredComplementaryAngle);
         if (placed) sheets.push(newSheet);
         else unplacedPieces.push({ instanceId: piece.instanceId, pieceId: piece.pieceId, area: piece.area });
       }
@@ -143,10 +139,6 @@ export class NestingEngine {
         const lastSheet = sheets[sheets.length - 1];
         const lastRecord = lastSheet.placedPieces[lastSheet.placedPieces.length - 1];
         lastPlacedAngle = lastRecord ? lastRecord.rotation : null;
-        if (lastRecord && lastRecord.bounds) {
-          globalMaxX = Math.max(globalMaxX, lastRecord.bounds.maxX);
-          globalMaxY = Math.max(globalMaxY, lastRecord.bounds.maxY);
-        }
       } else {
         lastPlacedPieceId = null;
         lastPlacedAngle = null;
@@ -210,7 +202,7 @@ export class NestingEngine {
     return false;
   }
 
-  tryPlaceBottomLeft(piece, sheet, margin, usableW, usableH, spacing, preferredAngle = null, globalMaxX = 0, globalMaxY = 0) {
+  tryPlaceBottomLeft(piece, sheet, margin, usableW, usableH, spacing, preferredAngle = null) {
     const anchorPoints = this.getAnchorPoints(sheet, margin, spacing, usableW, usableH);
 
     // Auto-Paridad: Si hay un ángulo complementario preferido, ordenamos las variantes para probarlo primero
@@ -223,11 +215,11 @@ export class NestingEngine {
     const oblique = sortVariants(piece.obliqueVariants);
 
     // Prioridad a piezas ortogonales
-    let bestPlacement = this.evaluateVariants(ortho, anchorPoints, sheet, margin, usableW, usableH, spacing, preferredAngle, globalMaxX, globalMaxY);
+    let bestPlacement = this.evaluateVariants(ortho, anchorPoints, sheet, margin, usableW, usableH, spacing, preferredAngle);
 
     // Si no entró derecha, intentamos inclinarla
     if (!bestPlacement && oblique.length > 0) {
-      bestPlacement = this.evaluateVariants(oblique, anchorPoints, sheet, margin, usableW, usableH, spacing, preferredAngle, globalMaxX, globalMaxY);
+      bestPlacement = this.evaluateVariants(oblique, anchorPoints, sheet, margin, usableW, usableH, spacing, preferredAngle);
     }
 
     if (bestPlacement) {
@@ -236,7 +228,7 @@ export class NestingEngine {
     return false;
   }
 
-  evaluateVariants(variants, anchorPoints, sheet, margin, usableW, usableH, spacing, preferredAngle = null, globalMaxX = 0, globalMaxY = 0) {
+  evaluateVariants(variants, anchorPoints, sheet, margin, usableW, usableH, spacing, preferredAngle = null) {
     let best = null;
     let bestScore = Infinity;
 
@@ -282,20 +274,21 @@ export class NestingEngine {
           const pieceWidth = (vBounds && vBounds.width !== undefined) ? vBounds.width : (variant.width || 0);
           const pieceHeight = (vBounds && vBounds.height !== undefined) ? vBounds.height : (variant.height || 0);
 
-          const testGlobalX = Math.max(globalMaxX, targetX + pieceWidth);
-          const testGlobalY = Math.max(globalMaxY, targetY + pieceHeight);
+          const pieceMaxX = targetX + pieceWidth;
+          const pieceMaxY = targetY + pieceHeight;
 
-          // Castigamos brutalmente el crecimiento en X (ancho), 
-          // permitimos el crecimiento libre en Y (alto) hasta topar con el margen de la plancha.
-          // El desempate de gravedad empuja la pieza hacia el origen para garantizar el encastre.
-          let score = (testGlobalX * 10000) + testGlobalY + ((targetX + targetY) * 0.001);
+          // Empaquetado por columnas estrictas (de abajo hacia arriba, luego saltar a la derecha):
+          // Ponderamos con máxima prioridad X (para llenar la columna izquierda primero),
+          // luego Y (para apilar desde la parte inferior hacia arriba),
+          // y el desempate por targetX/targetY.
+          let score = (pieceMaxX * 1000) + (pieceMaxY * 1) + (targetX * 0.1) + (targetY * 0.01);
 
           if (preferredAngle !== null && variant.angle === preferredAngle) {
-            score -= 300; // Bonus por encastre gemelo invertido complementario
+            score -= 50; // Bonus por encastre de gemelos
           }
 
           if (!variant.isOrthogonal) {
-            score += 40; // Penalización leve para ángulos oblicuos
+            score += 25; // Ligera preferencia por colocación ortogonal
           }
 
           if (score < bestScore) {
@@ -359,43 +352,43 @@ export class NestingEngine {
       pts.push({ x: margin, y: b.maxY + S });
       pts.push({ x: b.maxX + S, y: b.maxY + S });
 
-      // Anclajes direccionales para descubrir concavidades interiores
+      // Anclajes direccionales para descubrir concavidades interiores y encastres
       const poly = sheet.placedPieces[i].simplifiedPolygon;
       if (poly && poly.length > 0) {
-        const step = Math.max(1, Math.floor(poly.length / 10)); // Más resolución
+        const step = Math.max(1, Math.floor(poly.length / 12));
         for (let v = 0; v < poly.length; v += step) {
           pts.push({ x: poly[v].x + S, y: poly[v].y });
           pts.push({ x: poly[v].x, y: poly[v].y + S });
-          // Estas dos exploran HACIA ADENTRO (vital para la Curva)
           pts.push({ x: poly[v].x - S, y: poly[v].y });
           pts.push({ x: poly[v].x, y: poly[v].y - S });
         }
       }
     }
 
-    // Escaneo profundo del piso y la pared izquierda
-    for (let x = margin; x <= margin + usableW; x += 100) pts.push({ x, y: margin });
-    for (let y = margin; y <= margin + usableH; y += 100) pts.push({ x: margin, y });
+    // Escaneo de piso y pared izquierda
+    for (let x = margin; x <= margin + usableW; x += 50) pts.push({ x, y: margin });
+    for (let y = margin; y <= margin + usableH; y += 50) pts.push({ x: margin, y });
 
-    // Ordenamiento por Columnas Virtuales Finas (10mm)
+    // Ordenamiento por Columnas Virtuales (5mm):
+    // Prioridad 1: Menor columna X (extremo izquierdo)
+    // Prioridad 2: Menor Y dentro de la misma columna (de abajo hacia arriba)
     pts.sort((a, b) => {
-      const colA = Math.floor(a.x / 10);
-      const colB = Math.floor(b.x / 10);
-      if (colA === colB) return a.y - b.y; // Misma columna: apilar de abajo hacia arriba
-      return colA - colB; // Distinta columna: prioridad izquierda
+      const colA = Math.floor(a.x / 5);
+      const colB = Math.floor(b.x / 5);
+      if (colA === colB) return a.y - b.y;
+      return colA - colB;
     });
 
     const unique = [];
     for (let i = 0; i < pts.length; i++) {
       const p = pts[i];
       if (p.x >= margin && p.y >= margin && p.x <= margin + usableW && p.y <= margin + usableH) {
-        if (!unique.some(u => Math.abs(u.x - p.x) < 2.0 && Math.abs(u.y - p.y) < 2.0)) {
+        if (!unique.some(u => Math.abs(u.x - p.x) < 1.0 && Math.abs(u.y - p.y) < 1.0)) {
           unique.push(p);
         }
       }
     }
 
-    // Devolvemos el array COMPLETO sin hacer "slice"
     return unique;
   }
 
