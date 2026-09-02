@@ -81,18 +81,8 @@ export class NestingEngine {
       }
     }
 
-    // Restaurar el Pre-Sorting (Prioridad Absoluta al Área con agrupación por nombre si el tamaño es similar)
-    piecesPool.sort((a, b) => {
-      const areaDiff = b.area - a.area;
-      const idA = a.sourceId || a.pieceId || '';
-      const idB = b.sourceId || b.pieceId || '';
-      // Si la diferencia de área es pequeña (menos de 2000 mm2), agrupa por nombre
-      if (Math.abs(areaDiff) < 2000 && idA && idB) {
-        return idA.localeCompare(idB);
-      }
-      // De lo contrario, la más grande siempre gana
-      return areaDiff;
-    });
+    // Ordenamiento Estricto por Área (Mayor a menor sin excepciones)
+    piecesPool.sort((a, b) => (b.area || 0) - (a.area || 0));
 
     const usableW = Math.max(0, sheetW - 2 * sheetMargin);
     const usableH = Math.max(0, sheetH - 2 * sheetMargin);
@@ -109,11 +99,20 @@ export class NestingEngine {
 
     sheets.push(createNewSheet());
 
+    let globalMaxX = 0;
+    let globalMaxY = 0;
+    let lastPlacedPieceId = null;
+    let lastPlacedAngle = null;
+
     for (let pIdx = 0; pIdx < piecesPool.length; pIdx++) {
       if (this.shouldStop) break;
 
       const piece = piecesPool[pIdx];
       let placed = false;
+
+      // Auto-Paridad en Piezas Asimétricas (Twin Pairing Heuristic)
+      const isTwin = (lastPlacedPieceId === piece.pieceId && lastPlacedAngle !== null);
+      const preferredComplementaryAngle = isTwin ? (lastPlacedAngle + 180) % 360 : null;
 
       for (let s = 0; s < sheets.length; s++) {
         const curSheet = sheets[s];
@@ -123,7 +122,7 @@ export class NestingEngine {
         }
 
         if (!placed) {
-          placed = this.tryPlaceBottomLeft(piece, curSheet, sheetMargin, usableW, usableH, spacing);
+          placed = this.tryPlaceBottomLeft(piece, curSheet, sheetMargin, usableW, usableH, spacing, preferredComplementaryAngle, globalMaxX, globalMaxY);
         }
 
         if (placed) break;
@@ -131,20 +130,34 @@ export class NestingEngine {
 
       if (!placed) {
         const newSheet = createNewSheet();
-        placed = this.tryPlaceBottomLeft(piece, newSheet, sheetMargin, usableW, usableH, spacing);
+        globalMaxX = 0;
+        globalMaxY = 0;
+        placed = this.tryPlaceBottomLeft(piece, newSheet, sheetMargin, usableW, usableH, spacing, preferredComplementaryAngle, globalMaxX, globalMaxY);
         if (placed) sheets.push(newSheet);
         else unplacedPieces.push({ instanceId: piece.instanceId, pieceId: piece.pieceId, area: piece.area });
       }
 
       if (placed) {
         placedCount++;
-        if (this.onProgress) {
-          this.onProgress({
-            currentIteration: placedCount, placedCount, totalCount: piecesPool.length,
-            sheetsUsed: sheets.length, wastePercent: this.calculateTotalWaste(sheets),
-            candidateLayout: { sheets: [...sheets] }
-          });
+        lastPlacedPieceId = piece.pieceId;
+        const lastSheet = sheets[sheets.length - 1];
+        const lastRecord = lastSheet.placedPieces[lastSheet.placedPieces.length - 1];
+        lastPlacedAngle = lastRecord ? lastRecord.rotation : null;
+        if (lastRecord && lastRecord.bounds) {
+          globalMaxX = Math.max(globalMaxX, lastRecord.bounds.maxX);
+          globalMaxY = Math.max(globalMaxY, lastRecord.bounds.maxY);
         }
+      } else {
+        lastPlacedPieceId = null;
+        lastPlacedAngle = null;
+      }
+
+      if (this.onProgress) {
+        this.onProgress({
+          currentIteration: placedCount, placedCount, totalCount: piecesPool.length,
+          sheetsUsed: sheets.length, wastePercent: this.calculateTotalWaste(sheets),
+          candidateLayout: { sheets: [...sheets] }
+        });
       }
     }
 
@@ -197,15 +210,24 @@ export class NestingEngine {
     return false;
   }
 
-  tryPlaceBottomLeft(piece, sheet, margin, usableW, usableH, spacing) {
+  tryPlaceBottomLeft(piece, sheet, margin, usableW, usableH, spacing, preferredAngle = null, globalMaxX = 0, globalMaxY = 0) {
     const anchorPoints = this.getAnchorPoints(sheet, margin, spacing, usableW, usableH);
 
+    // Auto-Paridad: Si hay un ángulo complementario preferido, ordenamos las variantes para probarlo primero
+    const sortVariants = (varList) => {
+      if (preferredAngle === null) return varList;
+      return [...varList].sort((a, b) => (a.angle === preferredAngle ? -1 : (b.angle === preferredAngle ? 1 : 0)));
+    };
+
+    const ortho = sortVariants(piece.orthogonalVariants);
+    const oblique = sortVariants(piece.obliqueVariants);
+
     // Prioridad a piezas ortogonales
-    let bestPlacement = this.evaluateVariants(piece.orthogonalVariants, anchorPoints, sheet, margin, usableW, usableH, spacing);
+    let bestPlacement = this.evaluateVariants(ortho, anchorPoints, sheet, margin, usableW, usableH, spacing, preferredAngle, globalMaxX, globalMaxY);
 
     // Si no entró derecha, intentamos inclinarla
-    if (!bestPlacement && piece.obliqueVariants.length > 0) {
-      bestPlacement = this.evaluateVariants(piece.obliqueVariants, anchorPoints, sheet, margin, usableW, usableH, spacing);
+    if (!bestPlacement && oblique.length > 0) {
+      bestPlacement = this.evaluateVariants(oblique, anchorPoints, sheet, margin, usableW, usableH, spacing, preferredAngle, globalMaxX, globalMaxY);
     }
 
     if (bestPlacement) {
@@ -214,7 +236,7 @@ export class NestingEngine {
     return false;
   }
 
-  evaluateVariants(variants, anchorPoints, sheet, margin, usableW, usableH, spacing) {
+  evaluateVariants(variants, anchorPoints, sheet, margin, usableW, usableH, spacing, preferredAngle = null, globalMaxX = 0, globalMaxY = 0) {
     let best = null;
     let bestScore = Infinity;
 
@@ -257,21 +279,28 @@ export class NestingEngine {
         }
 
         if (!collision) {
-          // Carriles de 20mm para evitar el "efecto diente"
-          const colX = Math.floor(targetX / 20);
+          const pieceWidth = (vBounds && vBounds.width !== undefined) ? vBounds.width : (variant.width || 0);
+          const pieceHeight = (vBounds && vBounds.height !== undefined) ? vBounds.height : (variant.height || 0);
 
-          // colX pesa para alinear, targetY pesa para no irse al fondo, targetX desempata
-          let score = (colX * 2000) + (targetY * 10) + targetX;
+          const testGlobalX = Math.max(globalMaxX, targetX + pieceWidth);
+          const testGlobalY = Math.max(globalMaxY, targetY + pieceHeight);
+
+          // Castigamos brutalmente el crecimiento en X (ancho), 
+          // permitimos el crecimiento libre en Y (alto) hasta topar con el margen de la plancha.
+          // El desempate de gravedad empuja la pieza hacia el origen para garantizar el encastre.
+          let score = (testGlobalX * 10000) + testGlobalY + ((targetX + targetY) * 0.001);
+
+          if (preferredAngle !== null && variant.angle === preferredAngle) {
+            score -= 300; // Bonus por encastre gemelo invertido complementario
+          }
 
           if (!variant.isOrthogonal) {
-            score += 40; // Penalización leve para que use ángulos libres si realmente ahorra espacio
+            score += 40; // Penalización leve para ángulos oblicuos
           }
 
           if (score < bestScore) {
             bestScore = score;
             best = { variant, targetX, targetY };
-            // Salida temprana
-            if (colX <= Math.floor(margin / 20) && variant.isOrthogonal) return best;
           }
         }
       }
@@ -348,10 +377,10 @@ export class NestingEngine {
     for (let x = margin; x <= margin + usableW; x += 100) pts.push({ x, y: margin });
     for (let y = margin; y <= margin + usableH; y += 100) pts.push({ x: margin, y });
 
-    // Ordenamiento por Columnas Virtuales (20mm) para evitar el zigzag
+    // Ordenamiento por Columnas Virtuales Finas (10mm)
     pts.sort((a, b) => {
-      const colA = Math.floor(a.x / 20);
-      const colB = Math.floor(b.x / 20);
+      const colA = Math.floor(a.x / 10);
+      const colB = Math.floor(b.x / 10);
       if (colA === colB) return a.y - b.y; // Misma columna: apilar de abajo hacia arriba
       return colA - colB; // Distinta columna: prioridad izquierda
     });
