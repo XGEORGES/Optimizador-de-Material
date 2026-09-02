@@ -18,9 +18,9 @@ class NestingStore {
 
     // 2. Parámetros de Corte (Cutting Settings)
     this.settings = {
-      spacing: 5,        // Separación mínima entre piezas (mm)
-      rotationStep: 15,  // Paso de rotación en grados (1..90)
-      holeNesting: true  // Permitir anidado en agujeros
+      spacing: 5,        // Distancia mínima entre piezas (mm)
+      rotationStep: 90,  // Paso de rotación en grados (1..90)
+      holeNesting: true  // Permitir anidado dentro de agujeros
     };
 
     // 3. Inventario de Piezas

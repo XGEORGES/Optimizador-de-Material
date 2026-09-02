@@ -30,7 +30,7 @@ export class NestingEngine {
     const sheetH = Number(sheet.height);
     const sheetMargin = Number(sheet.margin || 0);
     const spacing = Number(settings.spacing || 5);
-    const rotationStep = Math.max(1, Number(settings.rotationStep || 15));
+    const rotationStep = Math.max(1, Number(settings.rotationStep || 90));
     const holeNestingEnabled = Boolean(settings.holeNesting);
 
     const allowedAngles = [];

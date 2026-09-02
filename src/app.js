@@ -56,7 +56,7 @@ class AppController {
     nestingStore.setSheetPreset('1200x2400');
     nestingStore.setSheetMargin(10);
     nestingStore.setSpacing(5);
-    nestingStore.setRotationStep(15);
+    nestingStore.setRotationStep(90);
     nestingStore.setHoleNesting(true);
   }
 
